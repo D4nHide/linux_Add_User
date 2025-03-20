@@ -2,6 +2,15 @@
 
 Pipeline para agregar usuarios en linux, crear una clave temporal, genere un archivo pdf con la configuración y permita cambiarla la clave al iniciar sesión.
 
+# IMPORTANTE
+
+- Antes asegurarse de tener permisos en el archivo /etc/sudoers para el usuario jenkins y configurar para que no solicite password como se declara a continuación, de lo contrario agregar la línea al archivo mencionado:
+
+jenkins ALL=(ALL) NOPASSWD: ALL
+
+![image](https://github.com/user-attachments/assets/b305a5e1-fde1-40c5-9f3b-ad86fb49ca6c)
+
+
 # Instrucciones
 
 - Ir a jenkins 
