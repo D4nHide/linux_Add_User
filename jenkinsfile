@@ -1,0 +1,119 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'NOMBRE_APELLIDO', defaultValue: '', description: 'Nombre y Apellido del usuario final')
+        string(name: 'DEPARTAMENTO', defaultValue: '', description: 'Departamento al que pertenece el usuario')
+    }
+
+    environment {
+        PDF_GENERATED_PATH = 'user_report.pdf'
+        CURRENT_DATE = new Date().format('yyyy-MM-dd') // Fecha actual
+    }
+
+    stages {
+        stage('Solicitar parámetros') {
+            steps {
+                script {
+                    // Pedir el login
+                    def nombreApellido = params.NOMBRE_APELLIDO
+                    def departamento = params.DEPARTAMENTO
+                    
+                    // Verificar si el nombreApellido tiene al menos dos partes (nombre y apellido)
+                    def nombre = ''
+                    def apellido = ''
+                    
+                    if (nombreApellido.split(" ").length == 2) {
+                        nombre = nombreApellido.split(" ")[0]
+                        apellido = nombreApellido.split(" ")[1]
+                    } else {
+                        error "El parámetro 'NOMBRE_APELLIDO' no esá correctamente formado. Debe contener al menos un nombre y un apellido."
+                    }
+
+                    // Crear el login basado en el primer carácter del nombre y el apellido
+                    def login = nombre[0] + apellido
+
+                    // Imprimir para ver los valores ingresados
+                    echo "Nombre y Apellido: ${nombreApellido}"
+                    echo "Departamento: ${departamento}"
+                    echo "Login: ${login}"
+                    
+                    // Asignar el login al entorno
+                    env.LOGIN = login
+                }
+            }
+        }
+
+        stage('Generar Contraseña') {
+            steps {
+                script {
+                    // Generar una contraseña temporal
+                    def password = "Temp@" + UUID.randomUUID().toString().take(8)
+                    echo "La contraseña generada es: ${password}"
+                    
+                    // Asignar la contraseña al entorno
+                    env.PASSWORD = password
+                }
+            }
+        }
+
+        stage('Crear usuario') {
+            steps {
+                script {
+                    // Asegurarse de que LOGIN y PASSWORD no sean nulos
+                    if (!env.LOGIN || !env.PASSWORD) {
+                        error "LOGIN o PASSWORD no están definidos correctamente."
+                    }
+
+                    // Crear el usuario en el sistema
+                    sh """
+                    sudo useradd -m -d /home/${env.LOGIN} -s /bin/bash ${env.LOGIN}
+                    echo '${env.LOGIN}:${env.PASSWORD}' | sudo chpasswd
+                    sudo chage -d  0 ${env.LOGIN} # Forzar el cambio de contraseña al primer inicio de sesión
+                    """
+                }
+            }
+        }
+
+        stage('Generar PDF') {
+            steps {
+                script {
+                    // Crear el contenido del PDF
+                    def pdfContent = """
+                    Reporte de Usuarios Creados - ${env.CURRENT_DATE}
+                    ------------------------------------------
+                    Nombre y Apellido: ${params.NOMBRE_APELLIDO}
+                    Departamento: ${params.DEPARTAMENTO}
+                    Login: ${env.LOGIN}
+                    Contraseña Temporal: ${env.PASSWORD}
+                    """
+
+                    // Guardar el archivo PDF
+                    writeFile file: 'user_report.txt', text: pdfContent
+                    
+                    // Crear un PDF desde el archivo de texto
+                    sh """
+                    sudo apt-get install -y pandoc
+                    pandoc user_report.txt -o ${env.PDF_GENERATED_PATH}
+                    """
+                }
+            }
+        }
+
+        stage('Archivos generados') {
+            steps {
+                script {
+                    echo "El archivo PDF se ha generado correctamente: ${env.PDF_GENERATED_PATH}"
+                    archiveArtifacts artifacts: env.PDF_GENERATED_PATH
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs() // Limpiar el workspace después de ejecutar el pipeline
+        }
+    }
+}
+
